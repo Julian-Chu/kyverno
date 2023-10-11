@@ -9,6 +9,11 @@ import (
 	"strings"
 
 	json_patch "github.com/evanphx/json-patch/v5"
+	"gomodules.xyz/jsonpatch/v2"
+	yamlv2 "gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	kyvernov1beta1 "github.com/kyverno/kyverno/api/kyverno/v1beta1"
 	"github.com/kyverno/kyverno/cmd/cli/kubectl-kyverno/apis/v1alpha1"
@@ -28,10 +33,6 @@ import (
 	"github.com/kyverno/kyverno/pkg/imageverifycache"
 	"github.com/kyverno/kyverno/pkg/registryclient"
 	jsonutils "github.com/kyverno/kyverno/pkg/utils/json"
-	"gomodules.xyz/jsonpatch/v2"
-	yamlv2 "gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type PolicyProcessor struct {
@@ -98,66 +99,72 @@ func (p *PolicyProcessor) ApplyPoliciesOnResource() ([]engineapi.EngineResponse,
 	var responses []engineapi.EngineResponse
 	// mutate
 	for _, policy := range p.Policies {
-		policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
-		if err != nil {
-			return responses, err
+		if policyHasMutate(policy) {
+			policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
+			if err != nil {
+				return responses, err
+			}
+			mutateResponse := eng.Mutate(context.Background(), policyContext)
+			err = p.processMutateEngineResponse(mutateResponse, resPath)
+			if err != nil {
+				return responses, fmt.Errorf("failed to print mutated result (%w)", err)
+			}
+			responses = append(responses, mutateResponse)
+			resource = mutateResponse.PatchedResource
 		}
-		mutateResponse := eng.Mutate(context.Background(), policyContext)
-		err = p.processMutateEngineResponse(mutateResponse, resPath)
-		if err != nil {
-			return responses, fmt.Errorf("failed to print mutated result (%w)", err)
-		}
-		responses = append(responses, mutateResponse)
-		resource = mutateResponse.PatchedResource
 	}
 	// verify images
 	for _, policy := range p.Policies {
-		policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
-		if err != nil {
-			return responses, err
+		if policyHasVerifyImages(policy) {
+			policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
+			if err != nil {
+				return responses, err
+			}
+			verifyImageResponse, verifiedImageData := eng.VerifyAndPatchImages(context.TODO(), policyContext)
+			// update annotation to reflect verified images
+			var patches []jsonpatch.JsonPatchOperation
+			if !verifiedImageData.IsEmpty() {
+				annotationPatches, err := verifiedImageData.Patches(len(verifyImageResponse.PatchedResource.GetAnnotations()) != 0, log.Log)
+				if err != nil {
+					return responses, err
+				}
+				// add annotation patches first
+				patches = append(annotationPatches, patches...)
+			}
+			if len(patches) != 0 {
+				patch := jsonutils.JoinPatches(patch.ConvertPatches(patches...)...)
+				decoded, err := json_patch.DecodePatch(patch)
+				if err != nil {
+					return responses, err
+				}
+				options := &json_patch.ApplyOptions{SupportNegativeIndices: true, AllowMissingPathOnRemove: true, EnsurePathExistsOnAdd: true}
+				resourceBytes, err := verifyImageResponse.PatchedResource.MarshalJSON()
+				if err != nil {
+					return responses, err
+				}
+				patchedResourceBytes, err := decoded.ApplyWithOptions(resourceBytes, options)
+				if err != nil {
+					return responses, err
+				}
+				if err := verifyImageResponse.PatchedResource.UnmarshalJSON(patchedResourceBytes); err != nil {
+					return responses, err
+				}
+			}
+			responses = append(responses, verifyImageResponse)
+			resource = verifyImageResponse.PatchedResource
 		}
-		verifyImageResponse, verifiedImageData := eng.VerifyAndPatchImages(context.TODO(), policyContext)
-		// update annotation to reflect verified images
-		var patches []jsonpatch.JsonPatchOperation
-		if !verifiedImageData.IsEmpty() {
-			annotationPatches, err := verifiedImageData.Patches(len(verifyImageResponse.PatchedResource.GetAnnotations()) != 0, log.Log)
-			if err != nil {
-				return responses, err
-			}
-			// add annotation patches first
-			patches = append(annotationPatches, patches...)
-		}
-		if len(patches) != 0 {
-			patch := jsonutils.JoinPatches(patch.ConvertPatches(patches...)...)
-			decoded, err := json_patch.DecodePatch(patch)
-			if err != nil {
-				return responses, err
-			}
-			options := &json_patch.ApplyOptions{SupportNegativeIndices: true, AllowMissingPathOnRemove: true, EnsurePathExistsOnAdd: true}
-			resourceBytes, err := verifyImageResponse.PatchedResource.MarshalJSON()
-			if err != nil {
-				return responses, err
-			}
-			patchedResourceBytes, err := decoded.ApplyWithOptions(resourceBytes, options)
-			if err != nil {
-				return responses, err
-			}
-			if err := verifyImageResponse.PatchedResource.UnmarshalJSON(patchedResourceBytes); err != nil {
-				return responses, err
-			}
-		}
-		responses = append(responses, verifyImageResponse)
-		resource = verifyImageResponse.PatchedResource
 	}
 	// validate
 	for _, policy := range p.Policies {
-		policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
-		if err != nil {
-			return responses, err
+		if policyHasValidate(policy) {
+			policyContext, err := p.makePolicyContext(jp, cfg, resource, policy, namespaceLabels, gvk, subresource)
+			if err != nil {
+				return responses, err
+			}
+			validateResponse := eng.Validate(context.TODO(), policyContext)
+			responses = append(responses, validateResponse)
+			resource = validateResponse.PatchedResource
 		}
-		validateResponse := eng.Validate(context.TODO(), policyContext)
-		responses = append(responses, validateResponse)
-		resource = validateResponse.PatchedResource
 	}
 	// generate
 	for _, policy := range p.Policies {
@@ -224,7 +231,7 @@ func (p *PolicyProcessor) makePolicyContext(
 		log.Log.Error(err, "failed to create policy context")
 		return nil, fmt.Errorf("failed to create policy context (%w)", err)
 	}
-	if operation == kyvernov1.Update {
+	if operation == kyvernov1.Update || operation == kyvernov1.Delete {
 		policyContext = policyContext.WithOldResource(resource)
 		if err := policyContext.JSONContext().AddOldResource(resource.Object); err != nil {
 			return nil, fmt.Errorf("failed to update old resource in json context (%w)", err)
