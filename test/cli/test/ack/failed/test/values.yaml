@@ -1,0 +1,9 @@
+policies:
+  - name: deny-retain-ack-resources-deletion
+    resources:
+      - name: test-0001-obj-store-no-retain
+        values:
+          request.operation: DELETE
+      - name: test-0001-obj-store-retain-with-bypass-annotation
+        values:
+          request.operation: DELETE

@@ -1,0 +1,21 @@
+policies:
+  - name: deny-retain-ack-resources-deletion
+    resources:
+      - name: test-0001-obj-store-retain
+        values:
+          request.operation: DELETE
+      - name: test-0001-obj-store-retain-create
+        values:
+          request.operation: CREATE
+      - name: test-0001-obj-store-retain-update
+        values:
+          request.operation: UPDATE
+      - name: test-0001-obj-store-no-retain
+        values:
+          request.operation: DELETE
+      - name: test-0001-obj-store-retain-with-bypass-annotation
+        values:
+          request.operation: DELETE
+      - name: test-0001-dynamodb
+        values:
+          request.operation: DELETE

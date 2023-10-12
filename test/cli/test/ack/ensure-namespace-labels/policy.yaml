@@ -1,0 +1,29 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: ensure-namespace-labels
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+  - name: ensure-squad-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+        subjects:
+        - kind: Group
+          name: squad
+    context:
+    - name: squads
+      variable:
+        jmesPath: "request.userInfo.groups[?starts_with(@, 'squad:')].trim_prefix(@, 'squad:')"
+    validate:
+      message: "Namespace must be labelled with dh_squad set to one of {{squads}}."
+      deny:
+        conditions:
+          any:
+          - key: "{{request.object.metadata.labels.dh_squad || ''}}"
+            operator: AnyNotIn
+            value: "{{squads}}"

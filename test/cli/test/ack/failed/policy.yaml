@@ -1,0 +1,62 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deny-retain-ack-resources-deletion
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: deny-retain-ack-resources-deletion
+      match:
+       any:
+          - resources:
+              kinds:
+                - dynamodb.services.k8s.aws/v1alpha1/Table
+                - s3.services.k8s.aws/v1alpha1/Bucket
+                - elasticache.services.k8s.aws/v1alpha1/ReplicationGroup
+                - rds.services.k8s.aws/v1alpha1/DBInstance
+                - rds.services.k8s.aws/v1alpha1/DBCluster
+                - iam.services.k8s.aws/v1alpha1/Role
+                - iam.services.k8s.aws/v1alpha1/Policy
+                - sqs.services.k8s.aws/v1alpha1/Queue
+                - sns.services.k8s.aws/v1alpha1/Topic
+              annotations:
+                services.k8s.aws/deletion-policy: retain
+#      exclude:
+#        any:
+#          - resources:
+#              annotations:
+#                deliveryhero.io/bypass: enable
+#          - resources:
+#                namespaces:
+#                  - ack-system
+#                  - kube-system
+#                  - cert-manager
+#                  - argo-rollouts
+#                  - datadog
+#                  - istio-gateway
+#                  - istio-system
+#                  - kubecost
+#                  - kyverno
+      preconditions:
+#        any:
+#          - key: '{{ request.object.metadata.namespace }}'
+#            operator: NotEquals
+#            value: ns1
+        any:
+          - key: '{{ request.object.metadata.annotations."deliveryhero.io/bypass" || ""
+            }}'
+            operator: NotEquals
+            value: "enable"
+
+      validate:
+        message: |
+          Deletion of ACK resources with deletion-policy: retain is not allowed,
+          Please remove the Orphan from your oam manifest or retain from your ack resource,
+          If really want to keep the aws resource, contact infra team to support
+        deny:
+          conditions:
+            any:
+              - key: "{{request.operation}}"
+                operator: Equals
+                value: DELETE

@@ -1,0 +1,16 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: generate-namespace-access-test
+policies:
+- policy.yaml
+resources:
+- test/test-resources.yaml
+results:
+- kind: Namespace
+  policy: generate-namespace-access
+  rule: generate-rolebinding
+  resources:
+  - test-namespace
+  result: pass
+  generatedResource: test/owner-rolebinding.yaml

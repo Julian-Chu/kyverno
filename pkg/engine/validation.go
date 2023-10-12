@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	"github.com/kyverno/kyverno/pkg/autogen"
 	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
@@ -21,6 +22,9 @@ func (e *engine) validate(
 	resp := engineapi.NewPolicyResponse()
 	policy := policyContext.Policy()
 	matchedResource := policyContext.NewResource()
+	if policyContext.Operation() == kyvernov1.Delete {
+		matchedResource = policyContext.OldResource()
+	}
 	applyRules := policy.GetSpec().GetApplyRules()
 
 	policyContext.JSONContext().Checkpoint()

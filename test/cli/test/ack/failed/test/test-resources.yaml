@@ -1,0 +1,16 @@
+apiVersion: s3.services.k8s.aws/v1alpha1
+kind: Bucket
+metadata:
+  name: test-0001-obj-store-no-retain
+  namespace: test-namespace
+---
+apiVersion: s3.services.k8s.aws/v1alpha1
+kind: Bucket
+metadata:
+  name: test-0001-obj-store-retain-with-bypass-annotation
+  namespace: test-namespace
+  annotations:
+    services.k8s.aws/deletion-policy: retain
+    deliveryhero.io/bypass: enable
+
+

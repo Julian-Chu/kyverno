@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-namespace-access
+spec:
+  generateExisting: true
+  rules:
+  - name: generate-rolebinding
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchExpressions:
+            - key: dh_squad
+              operator: Exists
+    generate:
+      kind: RoleBinding
+      apiVersion: rbac.authorization.k8s.io/v1
+      name: owner
+      namespace: "{{request.object.metadata.name}}"
+      synchronize: true
+      data:
+        subjects:
+        - kind: Group
+          name: "squad:{{request.object.metadata.labels.dh_squad}}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          kind: ClusterRole
+          name: dh:edit
+          apiGroup: rbac.authorization.k8s.io

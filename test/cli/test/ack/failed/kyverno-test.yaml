@@ -1,0 +1,18 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: deny-retain-ack-resources-deletion-test
+policies:
+  - policy.yaml
+resources:
+  - test/test-resources.yaml
+variables: test/values.yaml
+results:
+  - kind: Bucket
+    namespace: test-namespace
+    policy: deny-retain-ack-resources-deletion
+    rule: deny-retain-ack-resources-deletion
+    resources:
+      - test-0001-obj-store-no-retain
+      - test-0001-obj-store-retain-with-bypass-annotation
+    result: skip

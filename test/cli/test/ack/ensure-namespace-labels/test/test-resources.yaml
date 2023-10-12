@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+  labels:
+    dh_squad: constellation
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace-no-squad
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace-different-squad
+  labels:
+    dh_squad: foobar

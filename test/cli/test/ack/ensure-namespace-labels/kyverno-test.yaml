@@ -1,0 +1,28 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ensure-namespace-labels-test
+policies:
+- policy.yaml
+resources:
+- test/test-resources.yaml
+userinfo: test/user-info.yaml
+results:
+- kind: Namespace
+  policy: ensure-namespace-labels
+  rule: ensure-squad-label
+  resources:
+  - test-namespace
+  result: pass
+- kind: Namespace
+  policy: ensure-namespace-labels
+  rule: ensure-squad-label
+  resources:
+  - test-namespace-no-squad
+  result: fail
+- kind: Namespace
+  policy: ensure-namespace-labels
+  rule: ensure-squad-label
+  resources:
+  - test-namespace-different-squad
+  result: fail
